@@ -10,7 +10,14 @@ pub struct Cli {
 }
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    Scan,
+    Scan {
+        /// Disable NixOS declared-state checks; preserve ordinary observations.
+        #[arg(long)]
+        no_declared: bool,
+        /// Emit observation and declared-state results as structured JSON.
+        #[arg(long)]
+        json: bool,
+    },
     Snapshot {
         #[command(subcommand)]
         command: SnapshotCommand,

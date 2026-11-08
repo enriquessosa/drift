@@ -6,3 +6,10 @@ files = true
 paths = ["/etc/passwd", "/etc/ssh/sshd_config"]
 # Optional absolute path; parent must be private (0700).
 # database = "/home/alice/.local/state/drift/snapshots.sqlite3"
+
+# Optional Milestone 2 activity assertion, only after reviewing service semantics.
+# Pin to the exact resolved booted generation; mere unit enablement implies nothing.
+# [[nixos_expectations]]
+# unit = "example.service"
+# generation = "/nix/store/00000000000000000000000000000000-nixos-system-example-26.05"
+# active = true

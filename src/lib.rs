@@ -4,5 +4,6 @@ pub mod collectors;
 pub mod config;
 pub mod diff;
 pub mod model;
+pub mod nixos;
 pub mod report;
 pub mod storage;

@@ -1,9 +1,9 @@
 # Drift
 
 Drift is an unprivileged, read-only Linux CLI for collecting observations and
-comparing saved historical snapshots. Milestone 1 implements historical drift
-only. It does not evaluate Nix, assign risk severity, remediate findings, run a
-daemon, or scan other hosts.
+comparing saved historical snapshots, with a narrow Milestone 2 adapter for NixOS
+booted-generation systemd declarations. It does not evaluate Nix, assign risk
+severity, remediate findings, run a daemon, or scan other hosts.
 
 ## NixOS setup and verification
 
@@ -48,7 +48,9 @@ A diff can legitimately contain service or listener changes between scans.
 
 ## Commands and configuration
 
-- `drift scan`: collect and print collector status/counts without opening a DB.
+- `drift scan`: collect observations and audit supported NixOS declarations without opening a DB.
+- `drift scan --no-declared`: disable declared-state auditing for troubleshooting.
+- `drift scan --json`: emit the observation and declared audit in a JSON envelope.
 - `drift snapshot create`: collect, atomically save, and print the snapshot ID.
 - `drift snapshot list`: newest IDs first, with UTC Unix timestamps in seconds.
 - `drift diff --latest`: compare the two newest inserted snapshots; error if fewer
@@ -134,6 +136,102 @@ version 1. This conservative rule also avoids treating missing optional
 properties in partial evidence as changes. Complete empty results remain distinct
 from unavailable evidence. A change carries no inferred severity or causation.
 
+## NixOS declared-state coverage (Milestone 2)
+
+Declared-state auditing is separate from historical snapshot diffing. `scan`
+adds a typed audit to its existing observation summary. Snapshot creation, SQLite
+schema/version, version-1 observations, and historical comparisons are unchanged;
+declared expectations/results are not silently persisted into old snapshots.
+`scan --json` emits `{"observation": ..., "declared": ...}`. The declared report
+has its own version 1, capability/reason, generation provenance, declarations,
+comparison outcomes, diagnostics, and skipped-entry count. Human output retains
+the ordinary collector summary and adds evidence and reasons for each result.
+
+The adapter explicitly requires `ID=nixos` in os-release, an accessible
+`/run/booted-system` symlink resolving directly to a Nix store system generation,
+`nixos-version` metadata, and an `etc/systemd/system` artifact tree in the store.
+This layout was checked on this NixOS 26.05 host; other versions are supported
+only when they satisfy those layout assumptions, not by an unverified version
+compatibility promise. Containers identified by `/run/systemd/container` are
+unsupported. Missing references, inaccessible metadata and unsupported layouts
+are reported explicitly; ordinary Linux scanning still works on non-NixOS hosts.
+
+The booted generation is always the reference. `/run/current-system` records the
+activated generation and is checked separately, along with the canonical live
+`/etc/systemd/system` tree. The selected profile at
+`/nix/var/nix/profiles/system` is never used as a substitute. If activated and
+booted generations differ (for example after switching without rebooting), the
+adapter retains booted provenance but cannot confirm runtime mismatches. References
+are checked again after collection. These are trusted local system references,
+not cryptographic attestation of the machine or isolation from concurrent changes.
+
+Only top-level system `.service` artifacts are inventoried. A supported service
+has an explicit Type of `simple`, `exec`, `notify`, `notify-reload`, `dbus`, or
+`idle`, without interpreted override/activation complications. Templates and
+instances, aliases, masks, implicit/unknown Types, oneshot/forking services,
+conditions/asserts, ExecCondition, RemainAfterExit, StopWhenUnneeded, socket/timer/path
+companions, continued directives, and generation or runtime drop-ins are
+unsupported. Runtime `TriggeredBy` also excludes activation-dependent comparisons.
+Targets and non-service entries are counted as skipped. This intentionally leaves
+many real NixOS units unsupported, including generated units with override drop-ins.
+No systemd merge precedence, target graph, or arbitrary NixOS option semantics
+are approximated. Unit artifacts are read transiently (bounded to 1 MiB) solely
+to classify supported metadata. ExecStart commands, environments and other raw
+unit content are not included in reports or snapshots; no commands from artifacts
+are executed. Configured monitored files still receive metadata-only inspection.
+
+For supported declarations, fresh machine-readable `systemctl show` properties
+supplement the existing systemd observations. Disabled or incomplete systemd
+collection suppresses those supplemental queries. Complete, agreeing observation
+scope, matching generation/live-tree scope, a loaded unit, no pending daemon
+reload, and resolved artifact evidence are required. A match establishes only
+that the loaded immutable fragment and service Type agree. A different loaded
+fragment or Type is a narrowly described mismatch, without severity or an
+inference about causation. Missing units/properties, access failures, changing
+runtime evidence, or generation ambiguity are indeterminate. An inactive, enabled,
+static, indirect or disabled service is never an activity mismatch by itself.
+
+Optional operator assertions express activity intent explicitly, pinned to the
+exact booted store path. For example, in a TOML configuration:
+
+```toml
+[[nixos_expectations]]
+unit = "example.service"
+generation = "/nix/store/00000000000000000000000000000000-nixos-system-example-26.05"
+active = true
+```
+
+Replace that illustrative generation with the actual resolved booted path after
+reviewing the service semantics. `active = false` means not active (including
+failed); this is not a health check. A supported, fully evidenced service can
+match or mismatch that explicit assertion. Transitional states, wrong-generation
+assertions and assertions without a declaration are indeterminate. Unsupported
+services remain unsupported even with an assertion. Duplicate units, templates,
+relative generation paths and unsafe unit names are rejected. The adapter runs
+no Nix evaluation, rebuild, activation, remediation, or privileged operation.
+
+Examples (the exact inventory depends on the host):
+
+```sh
+cargo run --offline --locked -- scan
+cargo run --offline --locked -- scan --json
+cargo run --offline --locked -- scan --no-declared
+readlink -f /run/booted-system
+readlink -f /run/current-system
+systemctl show example.service --no-pager -p Id -p LoadState -p ActiveState -p Type -p FragmentPath -p DropInPaths -p NeedDaemonReload
+```
+
+```text
+Declared state: Supported: limited booted-generation system service artifact audit; enablement does not imply activity
+  Match example.service: unit artifact and Type agree; activity is informational, with no continuous activity expectation
+  Unsupported setup.service: oneshot, forking, or unknown service Type is outside supported continuous classes
+```
+
+These are illustrative results, not assertions that those services exist locally.
+The reference distinction follows [NixOS stage-2 initialization](https://github.com/NixOS/nixpkgs/blob/master/nixos/modules/system/boot/stage-2-init.sh)
+and the installed generation's activation script. Runtime metadata uses the
+machine-readable [systemctl show interface](https://www.freedesktop.org/software/systemd/man/latest/systemctl.html#show%20PATTERN%E2%80%A6%7CJOB%E2%80%A6).
+
 ## Collection, safety, and limitations
 
 - **Systemd:** fixed `systemctl list-units` and `list-unit-files` invocations,
@@ -182,7 +280,7 @@ permission-denied metadata errors (independent of host/root permission behavior)
 unchanged rejection of unrelated/legacy databases and sidecars, schema/version
 checks, namespace compatibility, process attribution fixtures, PID-insensitive
 diffing, serialization, and CLI orchestration with synthetic host identity.
-Formatting passes. All 22 tests passed (one unit test and 21 integration tests).
+Formatting passed for Milestone 1 with 22 tests (one unit test and 21 integration tests).
 On the NixOS host, `nix develop --offline path:. --command rustc --version`
 succeeded. Real default and example-config scans succeeded; inspect the collector
 statuses rather than treating exit success as complete evidence. A temporary
@@ -194,6 +292,17 @@ are in `/tmp/drift-host-verification.log` (mode 0600; temporary, not a release a
 These checks verify the current host and development shell; they do not establish
 compatibility with every NixOS release, permission setup, or network namespace.
 Collection remains sequential and best effort.
+
+Milestone 2 adds 19 synthetic NixOS tests, for 41 tests total. Required formatting,
+Clippy, tests and build are rerun in the Nix development shell before committing.
+A real read-only NixOS scan resolved the booted and activated generation paths
+independently, confirmed the live unit tree belonged to the activated generation,
+and inventoried 166 booted service declarations: 158 unsupported and 8
+indeterminate. There were no confirmed mismatches. This is expected on this host:
+booted and activated generations differ. Matched-scope matches and mismatches are
+verified with fixtures, not by changing or rebooting the host. JSON output and
+`--no-declared` are checked alongside unchanged historical snapshot operations.
+Milestone 2 verification logs are kept privately under `/tmp/drift-milestone2-*`.
 
 ## Git repository
 

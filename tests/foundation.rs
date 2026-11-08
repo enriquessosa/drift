@@ -259,9 +259,13 @@ fn cli_end_to_end_isolated_state() {
                 .chain(args.iter().copied()),
         )
         .unwrap();
-        drift::app::run(cli, |config| {
-            drift::collectors::collect_with_host(config, "0123456789abcdef0123456789abcdef")
-        })
+        drift::app::run_with_auditor(
+            cli,
+            |config| {
+                drift::collectors::collect_with_host(config, "0123456789abcdef0123456789abcdef")
+            },
+            |_, _| drift::nixos::model::Audit::disabled(),
+        )
     };
     assert!(run(&["scan"]).is_ok());
     assert!(!database.exists());

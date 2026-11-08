@@ -9,6 +9,7 @@ pub struct Config {
     pub files: bool,
     pub paths: Vec<PathBuf>,
     pub database: Option<PathBuf>,
+    pub nixos_expectations: Vec<crate::nixos::model::ActiveExpectation>,
 }
 impl Default for Config {
     fn default() -> Self {
@@ -18,6 +19,7 @@ impl Default for Config {
             files: true,
             paths: vec![],
             database: None,
+            nixos_expectations: vec![],
         }
     }
 }
@@ -48,6 +50,20 @@ impl Config {
         c.paths.dedup();
         if c.database.as_ref().is_some_and(|p| !p.is_absolute()) {
             bail!("database path must be absolute");
+        }
+        let mut units = std::collections::BTreeSet::new();
+        for expectation in &c.nixos_expectations {
+            if !crate::nixos::units::valid_service_name(&expectation.unit)
+                || expectation.unit.contains('@')
+                || !expectation.generation.is_absolute()
+                || expectation
+                    .generation
+                    .components()
+                    .any(|c| matches!(c, std::path::Component::ParentDir))
+                || !units.insert(&expectation.unit)
+            {
+                bail!("NixOS expectations require unique non-template service names and absolute generation paths without '..'");
+            }
         }
         Ok(c)
     }
