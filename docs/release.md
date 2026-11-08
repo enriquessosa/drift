@@ -63,7 +63,7 @@ Neither evidence-based observations nor findings establish whether the machine
 has been compromised. See README and findings-rules.md for configuration,
 privacy boundaries and exact supported semantics.
 
-# Licensing cleanup and publication gate
+# Licensing and distribution scope
 
 Drift 0.1.0 declares MIT in Cargo and Nix metadata. Its copyright attribution is
 Copyright (c) 2026 Carlos Enrique Jimenez Sosa, matching the local Pulse LICENSE
@@ -72,11 +72,25 @@ unavailable; the approved local reference points to enriquessosa/pulse-systemd.
 THIRD_PARTY_NOTICES.md and licenses/inventory.json contain the
 Linux dependency inventory and source notices installed into the Nix output.
 
-Publication blockers: obtain/reconstruct Rust binary-specific standard-library
-attribution and prepare the native closure corresponding-source/notice mechanism
-for the chosen distribution format. Exact upstream runtime notice files and
-source hashes are now supplied; this does not close those distribution gates. Vulnerability-audit results must be reviewed separately
-from licensing; neither tests nor a license inventory establish security.
+The v0.1.0 distribution scope is the public source repository and instructions
+for users to build locally with the locked Nix flake. Drift does not distribute
+a prebuilt package, Nix runtime closure, or standalone archive. The Rust
+standard-library attribution and exact native runtime notices are installed in
+the local Nix build output. The source-only scope is ready for integration;
+this is not a general legal-compliance determination.
+
+Before Drift distributes a Nix package or closure, inventory its paths with
+`nix path-info --recursive ./result`; inspect each non-Drift path's deriver
+using `nix-store --query --deriver PATH` and inspect its inputs with
+`nix derivation show DERIVATION`. Prepare a matching cache and corresponding
+source/patch availability using Nix's `nix copy --recursive` and derivation
+operations, then verify the recipient can obtain the complete required source
+closure and all notices. Recording an upstream source hash alone is not a
+source offer. No closure export or source offer is prepared by this release.
+Standalone binary archives are outside scope and require separate review.
+
+Vulnerability-audit results must be reviewed separately from licensing; neither
+tests nor a license inventory establish security.
 
 Nonblocking technical limitations remain narrow NixOS declared-state semantics,
 unverified matched-generation host auditing, limited architecture/platform
@@ -91,15 +105,21 @@ known vulnerabilities and no warnings. This does not cover native libraries,
 unknown vulnerabilities, or every possible enabled platform/feature combination.
 The license inventory covers 59 Linux-target Cargo packages; it is narrower
 than the all-target lockfile vulnerability scan. Full cross-platform license
-clearance and binary-specific Rust/native redistribution verification remain outstanding.
+clearance and license review for future binary/closure distribution remain
+outstanding.
 
-The final redistribution review obtained the exact locked Rust 1.99.0, glibc
-2.44 and GCC 16.2.0 source archives. See THIRD_PARTY_NOTICES.md and
-licenses/runtime-inventory.json for 85 retained source notices and provenance.
-Rust compiler-builtins has conjunctive MIT/Apache-with-LLVM-exception terms;
-glibc includes LGPL 2.1 and additional notices; GCC provides Runtime Library
-Exception 3.1. The remaining binary-specific/source-distribution gates prevent
-release integration at this review. No standalone archive or Nix closure export
-has been produced. Cargo notice regeneration exactly reproduced the existing
-59-package inventory. The local Pulse reference was at commit
+The locked Nix build uses rustc 1.99.0 (b940084d7eb6a299eb4bfeb8e34901bc051e7ac4),
+LLVM 21.1.8. `COPYRIGHT-library.html` is retained byte-for-byte from the matching
+official release artifact and verified against its channel manifest/archive
+hashes. The inspected executable directly links glibc and GCC libgcc; its Nix
+closure also contains libidn2 and libunistring. Exact versioned source notices
+are in `licenses/runtime/` and are installed with the package. The release
+inventory records seven closure paths and four direct ELF dependencies for the
+verified x86_64 Linux build. Rust compiler-builtins has conjunctive MIT/Apache-
+with-LLVM-exception terms; glibc includes LGPL 2.1 and additional notices; GCC
+provides Runtime Library Exception 3.1. libidn2 and libunistring have their
+own LGPL/GPL notices. These notices do not alone satisfy a future closure
+distribution's corresponding-source obligations. No closure export or
+standalone archive has been produced. Cargo notice regeneration exactly
+reproduced the 59-package inventory. The local Pulse reference was at commit
 ec71a8ff950a3296a9b1df62d2173f464af71fe8 when attribution was confirmed.

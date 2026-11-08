@@ -1,0 +1,2 @@
+# Keep the official Rust-generated attribution document byte-for-byte.
+licenses/runtime/rust-1.99.0/COPYRIGHT-library.html whitespace=-blank-at-eol
