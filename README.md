@@ -368,8 +368,8 @@ JSON scan completed with systemd, network, and file collectors marked complete.
 Tests use deterministic fixtures for denied access, unsupported and incomplete
 evidence, SQLite safety, findings, and CLI behavior.
 
-These are local checks; GitHub Actions has not run remotely. CI currently checks
-the Rust toolchain but does not install Nix or run `nix build`. Only x86_64 Linux
+These are local checks; GitHub Actions has not run remotely. CI checks Cargo with Rust 1.99.0 and separately builds the locked Nix package,
+then checks its version and help output. Only x86_64 Linux
 has been verified for the packaged output. A matched-generation NixOS audit is
 covered by fixtures, not by a host whose booted, activated, and live evidence
 matched. See [release limitations](docs/release.md).

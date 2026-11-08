@@ -6,7 +6,7 @@ Cargo.lock through fixed-output fetches; first-time dependency realization may
 need network access. Compilation uses the vendored source. Both Linux architectures
 in the flake are declared targets; only the current host is verified.
 
-The initial candidate is 0.1.0. CI assumes Rust 1.95.0 on Ubuntu 24.04 and uses
+The initial candidate is 0.1.0. CI assumes Rust 1.99.0 on Ubuntu 24.04 and uses
 checkout v6 pinned to a commit. Nix uses the Rust toolchain from locked nixpkgs. CI is prepared but
 has not run on GitHub. Before publishing, review licensing, release artifacts,
 architecture coverage, and the supported NixOS layout on target hosts.
@@ -120,3 +120,13 @@ own LGPL/GPL notices. These notices do not alone satisfy a future closure
 distribution's corresponding-source obligations. No closure export or
 standalone archive has been produced. Cargo notice regeneration exactly
 reproduced the 59-package inventory.
+
+CI has separate Cargo and Nix jobs on Ubuntu 24.04 with read-only repository
+permissions. The Nix job uses cachix/install-nix-action v31.11.3 pinned to
+75c75c31ebece974e48ebc36b4ad125bd97bd97b (verified against the upstream release
+tag), runs `nix build path:.`, and checks packaged version 0.1.0 and help.
+Cargo CI uses Rust 1.99.0 to match locked Nix release verification; Rust 1.95
+was not a declared supported minimum. No MSRV is currently promised. The Nix
+lockfile is unchanged. Installer action pinning does not pin every external
+installer download. Neither job uploads artifacts; remote CI execution remains
+unverified until the repository is published and Actions runs.
