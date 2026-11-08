@@ -136,7 +136,7 @@ version 1. This conservative rule also avoids treating missing optional
 properties in partial evidence as changes. Complete empty results remain distinct
 from unavailable evidence. A change carries no inferred severity or causation.
 
-## NixOS declared-state coverage (Milestone 2)
+## NixOS declared-state coverage (Milestones 2 and 2.1)
 
 Declared-state auditing is separate from historical snapshot diffing. `scan`
 adds a typed audit to its existing observation summary. Snapshot creation, SQLite
@@ -144,7 +144,11 @@ schema/version, version-1 observations, and historical comparisons are unchanged
 declared expectations/results are not silently persisted into old snapshots.
 `scan --json` emits `{"observation": ..., "declared": ...}`. The declared report
 has its own version 1, capability/reason, generation provenance, declarations,
-comparison outcomes, diagnostics, and skipped-entry count. Human output retains
+comparison outcomes, diagnostics, and skipped-entry count. Milestone 2.1 adds
+stable `reason_code`/`diagnostic_codes` fields and a derived `coverage` summary.
+These are additive version-1 JSON fields; older documents still deserialize
+with unknown reason codes. Historical snapshots and SQLite are unaffected.
+Human output retains
 the ordinary collector summary and adds evidence and reasons for each result.
 
 The adapter explicitly requires `ID=nixos` in os-release, an accessible
@@ -167,8 +171,12 @@ not cryptographic attestation of the machine or isolation from concurrent change
 
 Only top-level system `.service` artifacts are inventoried. A supported service
 has an explicit Type of `simple`, `exec`, `notify`, `notify-reload`, `dbus`, or
-`idle`, without interpreted override/activation complications. Templates and
-instances, aliases, masks, implicit/unknown Types, oneshot/forking services,
+`idle`, without interpreted override/activation complications. Milestone 2.1 also
+recognizes omitted Type as `simple` when exactly one nonempty ExecStart and no
+BusName or credential directives exist, or as `dbus` with one static, unambiguous
+BusName and that same start/credential restriction. Repeated/reset directives,
+credential-implied defaults and dynamic/escaped bus names remain unsupported.
+Templates and instances, aliases, masks, other implicit/unknown Types, oneshot/forking services,
 conditions/asserts, ExecCondition, RemainAfterExit, StopWhenUnneeded, socket/timer/path
 companions, continued directives, and generation or runtime drop-ins are
 unsupported. Runtime `TriggeredBy` also excludes activation-dependent comparisons.
@@ -222,15 +230,54 @@ systemctl show example.service --no-pager -p Id -p LoadState -p ActiveState -p T
 ```
 
 ```text
-Declared state: Supported: limited booted-generation system service artifact audit; enablement does not imply activity
-  Match example.service: unit artifact and Type agree; activity is informational, with no continuous activity expectation
-  Unsupported setup.service: oneshot, forking, or unknown service Type is outside supported continuous classes
+Declared state: Supported [layout_detected]: limited booted-generation system service artifact audit; enablement does not imply activity
+  Match example.service [artifact_match]: unit artifact and Type agree; activity is informational, with no continuous activity expectation
+  Unsupported setup.service [unsupported_type]: oneshot, forking, or unknown service Type is outside supported continuous classes
 ```
 
 These are illustrative results, not assertions that those services exist locally.
 The reference distinction follows [NixOS stage-2 initialization](https://github.com/NixOS/nixpkgs/blob/master/nixos/modules/system/boot/stage-2-init.sh)
 and the installed generation's activation script. Runtime metadata uses the
 machine-readable [systemctl show interface](https://www.freedesktop.org/software/systemd/man/latest/systemctl.html#show%20PATTERN%E2%80%A6%7CJOB%E2%80%A6).
+
+### Coverage diagnostics
+
+`scan` and `scan --json` group declarations and comparisons separately by status
+and stable reason code. **Unsupported** means the semantics/layout are outside
+this adapter's contract. **Indeterminate** means missing, inaccessible, conflicting,
+or incompatible evidence prevents a supported comparison. Neither is healthy or
+a confirmed mismatch. Ordinary observation collection remains available.
+
+`declared.coverage` contains `declarations`, `comparisons`, and `expectation_only`
+counts (`total`, `by_status`, `by_reason`), `scope`, `limitations`, and skipped
+non-service entries. The existing `declared.generation` supplies generation
+identifiers/provenance without duplicating paths in the summary. Each declaration
+and its result has one primary code; totals are not additive across these two
+views. Assertions lacking a declaration go only into `expectation_only`.
+Only nonzero buckets are emitted. Counts are recomputed from results during
+serialization/rendering, including after a reference changes; incoming JSON
+counts are never trusted. Summaries contain categories/counts, not unit names,
+commands, credential values or private file paths. Existing detailed evidence
+is retained separately.
+
+For example, a host with a generation mismatch can report:
+
+```text
+  scope: Incompatible; limitations: scope_incompatible
+  declarations: 166; status counts: {"supported": 11, "unsupported": 155}
+    supported_service: 8
+    implicit_simple_service: 1
+    implicit_dbus_service: 2
+    ...
+  comparisons: 166; status counts: {"indeterminate": 11, "unsupported": 155}
+    ...
+    scope_incompatible: 11
+```
+
+This abbreviated example reflects the measured host; it is not a universal
+NixOS inventory. See [coverage analysis and reason-code catalog](docs/nixos-coverage.md)
+for before/after counts, chosen cases, rejected categories, code meanings, JSON
+compatibility, and reproducible verification commands.
 
 ## Collection, safety, and limitations
 
@@ -303,6 +350,13 @@ booted and activated generations differ. Matched-scope matches and mismatches ar
 verified with fixtures, not by changing or rebooting the host. JSON output and
 `--no-declared` are checked alongside unchanged historical snapshot operations.
 Milestone 2 verification logs are kept privately under `/tmp/drift-milestone2-*`.
+
+Milestone 2.1 brings the suite to 50 tests, with coverage grouping, privacy, legacy JSON,
+missing evidence, inferred-type success and rejection fixtures. The real host's
+166-declaration comparison moves from 158 unsupported/8 indeterminate to
+155 unsupported/11 indeterminate, with no matches or mismatches asserted while
+generations differ. Detailed results and limitations are in the coverage analysis.
+Private verification artifacts use `/tmp/drift-coverage-*` and are not committed.
 
 ## Git repository
 

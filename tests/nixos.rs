@@ -231,7 +231,7 @@ fn supported_types_and_unsupported_activation_syntax() {
     for content in [
         "[Service]\nType=oneshot\n",
         "[Service]\nType=forking\n",
-        "[Service]\nExecStart=x\n",
+        "[Service]\nBusName=org.example.MissingStart\n",
         "[Unit]\nConditionPathExists=/anything\n[Service]\nType=simple\n",
         "[Unit]\nAssertPathExists=/anything\n[Service]\nType=simple\n",
         "[Service]\nType=simple\nRemainAfterExit=yes\n",
@@ -577,5 +577,311 @@ fn disabled_or_incomplete_systemd_never_runs_supplemental_queries() {
         .comparisons[0]
             .outcome,
         Outcome::Indeterminate
+    );
+}
+
+#[test]
+fn coverage_groups_declarations_without_counting_missing_assertions_twice() {
+    use drift::nixos::coverage::{Coverage, ReasonCode, ScopeStatus};
+    let f = Fixture::new();
+    f.supported();
+    f.unit("oneshot.service", "[Service]\nType=oneshot\n");
+    f.unit("activated.service", "[Service]\nType=simple\n");
+    f.unit("activated.socket", "");
+    symlink(
+        f._dir.path().join("missing"),
+        f.generation.join("etc/systemd/system/missing.service"),
+    )
+    .unwrap();
+    let config = Config {
+        nixos_expectations: vec![ActiveExpectation {
+            unit: "assertion-only.service".into(),
+            generation: f.generation.clone(),
+            active: true,
+        }],
+        ..Config::default()
+    };
+    let audit = f.audit("inactive", &config);
+    let c = Coverage::from_audit(&audit);
+    assert_eq!(c.scope, ScopeStatus::Compatible);
+    assert_eq!(c.declarations.total, 4);
+    assert_eq!(c.comparisons.total, 4);
+    assert_eq!(c.expectation_only.total, 1);
+    assert_eq!(
+        c.declarations.by_status,
+        BTreeMap::from([
+            ("supported".into(), 1),
+            ("unsupported".into(), 2),
+            ("indeterminate".into(), 1)
+        ])
+    );
+    assert_eq!(c.comparisons.by_status["match"], 1);
+    assert_eq!(c.comparisons.by_status["unsupported"], 2);
+    assert_eq!(c.comparisons.by_status["indeterminate"], 1);
+    assert_eq!(c.declarations.by_reason[&ReasonCode::SupportedService], 1);
+    assert_eq!(c.declarations.by_reason[&ReasonCode::UnsupportedType], 1);
+    assert_eq!(c.declarations.by_reason[&ReasonCode::SocketActivation], 1);
+    assert_eq!(
+        c.declarations.by_reason[&ReasonCode::ArtifactUnavailable],
+        1
+    );
+    assert_eq!(
+        c.expectation_only.by_reason[&ReasonCode::ExpectationDeclarationMissing],
+        1
+    );
+    for group in [&c.declarations, &c.comparisons, &c.expectation_only] {
+        assert_eq!(group.by_status.values().sum::<usize>(), group.total);
+        assert_eq!(group.by_reason.values().sum::<usize>(), group.total);
+    }
+    let mut reordered = audit.clone();
+    reordered.declarations.reverse();
+    reordered.comparisons.reverse();
+    assert_eq!(Coverage::from_audit(&reordered), c);
+    let json = serde_json::to_string(&c).unwrap();
+    assert!(!json.contains(f._dir.path().to_str().unwrap()));
+    assert!(!json.contains("assertion-only"));
+    assert!(!json.contains("missing.service"));
+    assert_eq!(
+        json,
+        serde_json::to_string(&Coverage::from_audit(&audit)).unwrap()
+    );
+    let serialized = serde_json::to_value(&audit).unwrap();
+    assert_eq!(serialized["coverage"], serde_json::to_value(&c).unwrap());
+}
+#[test]
+fn coverage_reports_missing_evidence_scope_and_changed_references() {
+    use drift::nixos::coverage::{Coverage, ReasonCode, ScopeStatus};
+    let f = Fixture::new();
+    f.supported();
+    fs::remove_file(&f.paths.activated).unwrap();
+    let c = Coverage::from_audit(&f.audit("active", &Config::default()));
+    assert_eq!(c.scope, ScopeStatus::Unavailable);
+    assert_eq!(c.comparisons.by_reason[&ReasonCode::ScopeIncompatible], 1);
+    symlink(&f.generation, &f.paths.activated).unwrap();
+    let audit = nixos::audit_with(&f.paths, &Config::default(), &f.state("active"), |_| {
+        fs::remove_file(&f.paths.activated).unwrap();
+        f.runtime("active")
+    });
+    let c = Coverage::from_audit(&audit);
+    assert_eq!(c.scope, ScopeStatus::Unavailable);
+    assert_eq!(c.comparisons.by_reason[&ReasonCode::GenerationChanged], 1);
+    assert!(c.limitations.contains(&ReasonCode::GenerationChanged));
+    fs::remove_file(&f.paths.os_release).unwrap();
+    let missing = f.audit("active", &Config::default());
+    assert_eq!(missing.reason_code, ReasonCode::OsDetectionUnavailable);
+    assert_eq!(Coverage::from_audit(&missing).declarations.total, 0);
+    assert!(Coverage::from_audit(&missing)
+        .limitations
+        .contains(&ReasonCode::OsDetectionUnavailable));
+    assert!(Coverage::from_audit(&Audit::disabled())
+        .limitations
+        .contains(&ReasonCode::Disabled));
+}
+#[test]
+fn additive_diagnostics_read_legacy_json_and_recompute_untrusted_counts() {
+    use drift::nixos::coverage::{Coverage, ReasonCode};
+    let f = Fixture::new();
+    f.supported();
+    let audit = f.audit("inactive", &Config::default());
+    let mut legacy = serde_json::to_value(&audit).unwrap();
+    for key in ["reason_code", "diagnostic_codes", "coverage"] {
+        legacy.as_object_mut().unwrap().remove(key);
+    }
+    for d in legacy["declarations"].as_array_mut().unwrap() {
+        d.as_object_mut().unwrap().remove("reason_code");
+    }
+    for r in legacy["comparisons"].as_array_mut().unwrap() {
+        r.as_object_mut().unwrap().remove("reason_code");
+    }
+    legacy["coverage"] = serde_json::json!({"declarations":{"total":999}});
+    let parsed: Audit = serde_json::from_value(legacy).unwrap();
+    assert_eq!(parsed.version, 1);
+    assert_eq!(parsed.reason_code, ReasonCode::Unknown);
+    assert_eq!(parsed.comparisons[0].outcome, Outcome::Match);
+    assert_eq!(Coverage::from_audit(&parsed).declarations.total, 1);
+    assert_eq!(
+        Coverage::from_audit(&parsed).comparisons.by_reason[&ReasonCode::Unknown],
+        1
+    );
+    assert_eq!(
+        serde_json::to_value(parsed).unwrap()["coverage"]["declarations"]["total"],
+        1
+    );
+}
+#[test]
+fn reason_codes_cover_supported_and_rejected_unit_syntax() {
+    use drift::nixos::coverage::ReasonCode;
+    for (content, code) in [
+        ("[Service]\nType=simple\n", ReasonCode::SupportedService),
+        (
+            "[Service]\nBusName=org.example.MissingStart\n",
+            ReasonCode::ImplicitType,
+        ),
+        ("[Service]\nType=oneshot\n", ReasonCode::UnsupportedType),
+        (
+            "[Service]\nType=simple\nType=notify\n",
+            ReasonCode::RepeatedType,
+        ),
+        (
+            "[Unit]\nConditionPathExists=private\n[Service]\nType=simple\n",
+            ReasonCode::ConditionalSemantics,
+        ),
+        (
+            "[Service]\nType=simple\nExecStart=x \\\n y\n",
+            ReasonCode::ContinuedDirective,
+        ),
+        ("invalid syntax", ReasonCode::UnsupportedSyntax),
+    ] {
+        assert_eq!(units::classify_content(content).2, code);
+        assert!(!code.to_string().contains("private"));
+    }
+}
+
+#[test]
+fn omitted_type_supports_only_unambiguous_simple_and_static_dbus_defaults() {
+    use drift::nixos::coverage::ReasonCode;
+    for (text, kind, code) in [
+        (
+            "[Service]\nExecStart=/fixture/not-executed\n",
+            ServiceType::Simple,
+            ReasonCode::ImplicitSimpleService,
+        ),
+        (
+            "[Service]\nExecStart=/fixture/not-executed\nBusName=org.example.Server\n",
+            ServiceType::Dbus,
+            ReasonCode::ImplicitDbusService,
+        ),
+    ] {
+        let (actual, support, reason) = units::classify_content(text);
+        assert_eq!(actual, Some(kind));
+        assert_eq!(support, Support::Supported);
+        assert_eq!(reason, code);
+    }
+}
+#[test]
+fn implicit_defaults_reject_credentials_resets_and_ambiguous_bus_names() {
+    use drift::nixos::coverage::ReasonCode;
+    for body in [
+        "ExecStart=",
+        "BusName=org.example.NoStart",
+        "ExecStart=x\nExecStart=y",
+        "ExecStart=\nExecStart=x",
+        "ExecStart=x\nBusName=",
+        "ExecStart=x\nBusName=org.example.%i",
+        "ExecStart=x\nBusName=org.example.X\nBusName=org.example.Y",
+        "ExecStart=x\nBusName=:1.234",
+        "ExecStart=x\nBusName='org.example.X'",
+        "ExecStart=x\nBusName=org..X",
+        "ExecStart=x\nBusName=org.0X",
+        "ExecStart=x\nBusName=org.example.X\\escape",
+        "ExecStart=x\nLoadCredential=private-value",
+        "ExecStart=x\nImportCredential=private-value",
+        "ExecStart=x\nSetCredentialEncrypted=private-value",
+        "ExecStart=x\nBusName=org.example.X\nLoadCredentialEncrypted=private-value",
+    ] {
+        let (kind, support, code) = units::classify_content(&format!("[Service]\n{body}\n"));
+        assert!(kind.is_none());
+        assert!(matches!(&support, Support::Unsupported(_)));
+        assert_eq!(code, ReasonCode::ImplicitType);
+        assert!(!serde_json::to_string(&support)
+            .unwrap()
+            .contains("private-value"));
+    }
+}
+#[test]
+fn implicit_activity_is_informational_and_scope_guards_remain_mandatory() {
+    use drift::nixos::coverage::ReasonCode;
+    let f = Fixture::new();
+    f.unit("example.service", "[Service]\nExecStart=/not-executed\n");
+    let audit = f.audit("inactive", &Config::default());
+    assert_eq!(
+        audit.declarations[0].reason_code,
+        ReasonCode::ImplicitSimpleService
+    );
+    assert_eq!(audit.comparisons[0].outcome, Outcome::Match);
+    assert_eq!(audit.comparisons[0].reason_code, ReasonCode::ArtifactMatch);
+    let config = Config {
+        nixos_expectations: vec![ActiveExpectation {
+            unit: "example.service".into(),
+            generation: f.generation.clone(),
+            active: true,
+        }],
+        ..Config::default()
+    };
+    assert_eq!(
+        f.audit("inactive", &config).comparisons[0].reason_code,
+        ReasonCode::ActivityMismatch
+    );
+    let mut partial = f.state("inactive");
+    partial.collectors.get_mut("systemd").unwrap().status = Status::Partial;
+    assert_eq!(
+        nixos::audit_with(&f.paths, &config, &partial, |_| panic!(
+            "no partial queries"
+        ))
+        .comparisons[0]
+            .outcome,
+        Outcome::Indeterminate
+    );
+    fs::remove_file(&f.paths.activated).unwrap();
+    assert_eq!(
+        f.audit("inactive", &config).comparisons[0].reason_code,
+        ReasonCode::ScopeIncompatible
+    );
+}
+#[test]
+fn implicit_dbus_requires_agreeing_runtime_type_without_trigger_or_dropins() {
+    use drift::nixos::coverage::ReasonCode;
+    let f = Fixture::new();
+    f.unit(
+        "example.service",
+        "[Service]\nExecStart=/not-executed\nBusName=org.example.Server\n",
+    );
+    for (kind, trigger, expected) in [
+        ("dbus", "", ReasonCode::ArtifactMatch),
+        ("simple", "", ReasonCode::TypeMismatch),
+        ("dbus", "example.socket", ReasonCode::RuntimeActivation),
+    ] {
+        let mut runtime = f.runtime("inactive").unwrap();
+        let r = runtime.get_mut("example.service").unwrap();
+        r.service_type = kind.into();
+        r.triggered_by = trigger.into();
+        let a = nixos::audit_with(&f.paths, &Config::default(), &f.state("inactive"), |_| {
+            Ok(runtime.clone())
+        });
+        assert_eq!(a.comparisons[0].reason_code, expected);
+    }
+    fs::create_dir(f.generation.join("etc/systemd/system/example.service.d")).unwrap();
+    assert_eq!(
+        f.audit("inactive", &Config::default()).declarations[0].reason_code,
+        ReasonCode::GenerationDropIns
+    );
+}
+#[test]
+fn inferred_defaults_do_not_bypass_other_unsupported_semantics() {
+    use drift::nixos::coverage::ReasonCode;
+    let f = Fixture::new();
+    f.unit(
+        "example.service",
+        "[Unit]\nConditionPathExists=not-collected\n[Service]\nExecStart=x\n",
+    );
+    assert_eq!(
+        f.audit("inactive", &Config::default()).declarations[0].reason_code,
+        ReasonCode::ConditionalSemantics
+    );
+    f.unit("example.service", "[Service]\nExecStart=x\n");
+    f.unit("example.timer", "");
+    assert_eq!(
+        f.audit("inactive", &Config::default()).declarations[0].reason_code,
+        ReasonCode::TimerActivation
+    );
+    f.unit("template@.service", "[Service]\nExecStart=x\n");
+    assert_eq!(
+        f.audit("inactive", &Config::default())
+            .declarations
+            .iter()
+            .find(|d| d.unit == "template@.service")
+            .unwrap()
+            .reason_code,
+        ReasonCode::UnsupportedIdentity
     );
 }

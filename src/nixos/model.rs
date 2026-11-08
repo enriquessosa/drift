@@ -1,3 +1,4 @@
+use super::coverage::{Coverage, ReasonCode};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::PathBuf};
 
@@ -62,6 +63,8 @@ pub struct Declaration {
     pub fragment: Option<PathBuf>,
     pub service_type: Option<ServiceType>,
     pub support: Support,
+    #[serde(default)]
+    pub reason_code: ReasonCode,
 }
 /// Explicit operator intent, not an inference from enablement or WantedBy.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -96,28 +99,40 @@ pub enum Outcome {
 pub struct Comparison {
     pub unit: String,
     pub outcome: Outcome,
+    #[serde(default)]
+    pub reason_code: ReasonCode,
     pub reason: String,
     pub evidence: Vec<PathBuf>,
 }
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct Audit {
     pub version: u32,
     pub capability: Capability,
+    #[serde(default)]
+    pub reason_code: ReasonCode,
     pub reason: String,
     pub generation: Option<Generation>,
     pub diagnostics: Vec<String>,
+    #[serde(default)]
+    pub diagnostic_codes: Vec<ReasonCode>,
     pub declarations: Vec<Declaration>,
     pub comparisons: Vec<Comparison>,
     pub skipped_non_services: usize,
 }
 impl Audit {
-    pub fn unavailable(capability: Capability, reason: impl Into<String>) -> Self {
+    pub fn unavailable(
+        capability: Capability,
+        reason_code: ReasonCode,
+        reason: impl Into<String>,
+    ) -> Self {
         Self {
             version: 1,
             capability,
+            reason_code,
             reason: reason.into(),
             generation: None,
             diagnostics: vec![],
+            diagnostic_codes: vec![],
             declarations: vec![],
             comparisons: vec![],
             skipped_non_services: 0,
@@ -126,7 +141,29 @@ impl Audit {
     pub fn disabled() -> Self {
         Self::unavailable(
             Capability::Disabled,
+            ReasonCode::Disabled,
             "declared-state auditing disabled by --no-declared",
         )
+    }
+}
+
+// Coverage is derived at serialization time: it cannot become stale after a
+// comparison is invalidated. Old JSON without additive diagnostic fields still reads.
+impl Serialize for Audit {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("Audit", 11)?;
+        state.serialize_field("version", &self.version)?;
+        state.serialize_field("capability", &self.capability)?;
+        state.serialize_field("reason", &self.reason)?;
+        state.serialize_field("reason_code", &self.reason_code)?;
+        state.serialize_field("generation", &self.generation)?;
+        state.serialize_field("diagnostics", &self.diagnostics)?;
+        state.serialize_field("diagnostic_codes", &self.diagnostic_codes)?;
+        state.serialize_field("declarations", &self.declarations)?;
+        state.serialize_field("comparisons", &self.comparisons)?;
+        state.serialize_field("skipped_non_services", &self.skipped_non_services)?;
+        state.serialize_field("coverage", &Coverage::from_audit(self))?;
+        state.end()
     }
 }

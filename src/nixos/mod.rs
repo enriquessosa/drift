@@ -1,9 +1,11 @@
 pub mod compare;
+pub mod coverage;
 pub mod generation;
 pub mod model;
 pub mod runtime;
 pub mod units;
 use crate::{config::Config, model::Snapshot};
+use coverage::{Coverage, ReasonCode};
 use generation::SystemPaths;
 use model::{Audit, Capability};
 
@@ -19,16 +21,23 @@ pub fn audit_with(
 ) -> Audit {
     let generation = match generation::detect(paths) {
         Ok(g) => g,
-        Err((capability, reason)) => return Audit::unavailable(capability, reason),
+        Err((capability, code, reason)) => return Audit::unavailable(capability, code, reason),
     };
     let store = match paths.store.canonicalize() {
         Ok(p) => p,
-        Err(e) => return Audit::unavailable(Capability::Unavailable, e.to_string()),
+        Err(e) => {
+            return Audit::unavailable(
+                Capability::Unavailable,
+                ReasonCode::StoreUnavailable,
+                e.to_string(),
+            )
+        }
     };
     let (declarations, skipped) = match units::declarations(&generation, &store) {
         Ok(result) => result,
         Err(e) => {
-            let mut audit = Audit::unavailable(Capability::Unavailable, e);
+            let mut audit =
+                Audit::unavailable(Capability::Unavailable, ReasonCode::UnitsUnavailable, e);
             audit.generation = Some(generation);
             return audit;
         }
@@ -39,6 +48,7 @@ pub fn audit_with(
         .map(|d| d.unit.clone())
         .collect();
     let mut diagnostics = vec![];
+    let mut diagnostic_codes = vec![];
     let mut runtime = if config.systemd
         && snapshot
             .collectors
@@ -51,6 +61,7 @@ pub fn audit_with(
     };
     if let Err(reason) = &runtime {
         diagnostics.push(reason.clone());
+        diagnostic_codes.push(ReasonCode::RuntimeUnavailable);
     }
     if let Ok(map) = &mut runtime {
         for r in map.values_mut() {
@@ -63,12 +74,14 @@ pub fn audit_with(
                         "{}: runtime fragment metadata unavailable: {error}",
                         r.id
                     ));
+                    diagnostic_codes.push(ReasonCode::FragmentUnavailable);
                     Default::default()
                 }
             };
         }
     }
     if !generation.compatible() {
+        diagnostic_codes.push(ReasonCode::ScopeIncompatible);
         diagnostics.push("booted generation differs from activated generation/live unit tree, or a reference is unavailable; comparisons are conservative".into());
     }
     let mut comparisons = compare::compare(
@@ -80,9 +93,11 @@ pub fn audit_with(
     );
     if generation::detect(paths).ok().as_ref() != Some(&generation) {
         diagnostics.push("generation references changed during collection".into());
+        diagnostic_codes.push(ReasonCode::GenerationChanged);
         for result in &mut comparisons {
             if result.outcome != model::Outcome::Unsupported {
                 result.outcome = model::Outcome::Indeterminate;
+                result.reason_code = ReasonCode::GenerationChanged;
                 result.reason = "generation references changed during collection".into();
             }
         }
@@ -90,9 +105,11 @@ pub fn audit_with(
     Audit {
         version: 1,
         capability: Capability::Supported,
+        reason_code: ReasonCode::LayoutDetected,
         reason: "limited booted-generation system service artifact audit; enablement does not imply activity".into(),
         generation: Some(generation),
         diagnostics,
+        diagnostic_codes,
         declarations,
         comparisons,
         skipped_non_services: skipped,
@@ -103,8 +120,8 @@ pub fn render(audit: &Audit) -> String {
     let mut out = String::new();
     writeln!(
         out,
-        "Declared state: {:?}: {}",
-        audit.capability, audit.reason
+        "Declared state: {:?} [{}]: {}",
+        audit.capability, audit.reason_code, audit.reason
     )
     .unwrap();
     if let Some(g) = &audit.generation {
@@ -126,24 +143,39 @@ pub fn render(audit: &Audit) -> String {
         audit.skipped_non_services
     )
     .unwrap();
-    for outcome in [
-        model::Outcome::Match,
-        model::Outcome::Mismatch,
-        model::Outcome::Indeterminate,
-        model::Outcome::Unsupported,
-    ] {
-        let count = audit
-            .comparisons
+    let coverage = Coverage::from_audit(audit);
+    writeln!(
+        out,
+        "  scope: {:?}; limitations: {}",
+        coverage.scope,
+        coverage
+            .limitations
             .iter()
-            .filter(|r| r.outcome == outcome)
-            .count();
-        writeln!(out, "  {outcome:?}: {count}").unwrap();
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
+    .unwrap();
+    for (label, group) in [
+        ("declarations", &coverage.declarations),
+        ("comparisons", &coverage.comparisons),
+        ("expectation-only", &coverage.expectation_only),
+    ] {
+        writeln!(
+            out,
+            "  {label}: {}; status counts: {:?}",
+            group.total, group.by_status
+        )
+        .unwrap();
+        for (code, count) in &group.by_reason {
+            writeln!(out, "    {code}: {count}").unwrap();
+        }
     }
     for result in &audit.comparisons {
         writeln!(
             out,
-            "  {:?} {}: {}\n    evidence: {:?}",
-            result.outcome, result.unit, result.reason, result.evidence
+            "  {:?} {} [{}]: {}\n    evidence: {:?}",
+            result.outcome, result.unit, result.reason_code, result.reason, result.evidence
         )
         .unwrap();
     }

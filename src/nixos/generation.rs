@@ -1,3 +1,4 @@
+use super::coverage::ReasonCode;
 use super::model::{Capability, Generation};
 use std::{
     fs,
@@ -25,10 +26,14 @@ impl Default for SystemPaths {
         }
     }
 }
-pub fn detect(paths: &SystemPaths) -> Result<Generation, (Capability, String)> {
-    let unavailable = |s: String| (Capability::Unavailable, s);
-    let release = fs::read_to_string(&paths.os_release)
-        .map_err(|e| unavailable(format!("cannot detect NixOS: {e}")))?;
+pub fn detect(paths: &SystemPaths) -> Result<Generation, (Capability, ReasonCode, String)> {
+    let unavailable = |code, s: String| (Capability::Unavailable, code, s);
+    let release = fs::read_to_string(&paths.os_release).map_err(|e| {
+        unavailable(
+            ReasonCode::OsDetectionUnavailable,
+            format!("cannot detect NixOS: {e}"),
+        )
+    })?;
     let ids: Vec<_> = release
         .lines()
         .filter_map(|line| line.strip_prefix("ID="))
@@ -37,6 +42,7 @@ pub fn detect(paths: &SystemPaths) -> Result<Generation, (Capability, String)> {
     if ids != ["nixos"] {
         return Err((
             Capability::Unsupported,
+            ReasonCode::NonNixos,
             "NixOS ID not established; ordinary Linux observations remain available".into(),
         ));
     }
@@ -44,33 +50,45 @@ pub fn detect(paths: &SystemPaths) -> Result<Generation, (Capability, String)> {
         Ok(_) => {
             return Err((
                 Capability::Unsupported,
+                ReasonCode::ContainerUnsupported,
                 "container layout is not supported for booted-generation auditing".into(),
             ))
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
         Err(e) => {
-            return Err(unavailable(format!(
-                "cannot establish container capability: {e}"
-            )))
+            return Err(unavailable(
+                ReasonCode::ContainerDetectionUnavailable,
+                format!("cannot establish container capability: {e}"),
+            ))
         }
     }
-    let store = paths
-        .store
-        .canonicalize()
-        .map_err(|e| unavailable(format!("Nix store unavailable: {e}")))?;
-    let booted = resolve_reference(&paths.booted, &store).map_err(unavailable)?;
+    let store = paths.store.canonicalize().map_err(|e| {
+        unavailable(
+            ReasonCode::StoreUnavailable,
+            format!("Nix store unavailable: {e}"),
+        )
+    })?;
+    let booted = resolve_reference(&paths.booted, &store)
+        .map_err(|reason| unavailable(ReasonCode::GenerationUnavailable, reason))?;
     let version = booted.join("nixos-version");
     if !fs::metadata(&version).is_ok_and(|m| m.is_file()) {
         return Err(unavailable(
+            ReasonCode::GenerationMetadataUnavailable,
             "booted generation lacks nixos-version metadata".into(),
         ));
     }
     let units = booted
         .join("etc/systemd/system")
         .canonicalize()
-        .map_err(|e| unavailable(format!("booted unit artifacts unavailable: {e}")))?;
+        .map_err(|e| {
+            unavailable(
+                ReasonCode::UnitsUnavailable,
+                format!("booted unit artifacts unavailable: {e}"),
+            )
+        })?;
     if !units.starts_with(&store) || !units.is_dir() {
         return Err(unavailable(
+            ReasonCode::UnitsUnavailable,
             "booted unit directory is outside the supported store layout".into(),
         ));
     }

@@ -1,4 +1,4 @@
-use super::model::*;
+use super::{coverage::ReasonCode, model::*};
 use crate::model::{Collection, Status};
 
 /// Pure declared/observed comparison. Resolved paths and systemctl properties
@@ -13,65 +13,92 @@ pub fn compare(
     let mut results = Vec::new();
     for d in declarations {
         let mut evidence = vec![d.evidence.clone()];
-        let (outcome, reason) = match &d.support {
-            Support::Unsupported(reason) => (Outcome::Unsupported, reason.clone()),
-            Support::Indeterminate(reason) => (Outcome::Indeterminate, reason.clone()),
+        let (outcome, reason_code, reason) = match &d.support {
+            Support::Unsupported(reason) => (Outcome::Unsupported, d.reason_code, reason.clone()),
+            Support::Indeterminate(reason) => {
+                (Outcome::Indeterminate, d.reason_code, reason.clone())
+            }
             Support::Supported => {
-                let evaluate = || -> (Outcome, String) {
+                let evaluate = || -> (Outcome, ReasonCode, String) {
                     if d.generation != generation.booted || !generation.compatible() {
-                        return (Outcome::Indeterminate,"booted, activated, and live unit scopes do not agree or are unavailable".into());
+                        return (Outcome::Indeterminate,ReasonCode::ScopeIncompatible,"booted, activated, and live unit scopes do not agree or are unavailable".into());
                     }
                     let Some(c) = observed.filter(|c| {
                         c.status == Status::Complete
                             && c.source == "systemctl system services"
                             && c.coverage == ["system services"]
                     }) else {
-                        return (Outcome::Indeterminate,"systemd observation collector is missing, disabled, incomplete, or has an incompatible scope".into());
+                        return (Outcome::Indeterminate,ReasonCode::ObservationIncomplete,"systemd observation collector is missing, disabled, incomplete, or has an incompatible scope".into());
                     };
                     let Some(resource) = c.resources.get(&d.unit) else {
-                        return (Outcome::Indeterminate,"runtime unit observation unavailable; absence is not proof of a failed declaration".into());
+                        return (Outcome::Indeterminate,ReasonCode::UnitObservationMissing,"runtime unit observation unavailable; absence is not proof of a failed declaration".into());
                     };
                     let map = match runtime {
                         Ok(map) => map,
-                        Err(reason) => return (Outcome::Indeterminate, reason.clone()),
+                        Err(reason) => {
+                            return (
+                                Outcome::Indeterminate,
+                                ReasonCode::RuntimeUnavailable,
+                                reason.clone(),
+                            )
+                        }
                     };
                     let Some(r) = map.get(&d.unit) else {
                         return (
                             Outcome::Indeterminate,
+                            ReasonCode::RuntimeUnitMissing,
                             "structured unit properties unavailable (including possible alias)"
                                 .into(),
                         );
                     };
-                    if !r.drop_ins.is_empty() || !r.triggered_by.is_empty() {
+                    if !r.drop_ins.is_empty() {
                         return (
                             Outcome::Unsupported,
-                            "runtime drop-ins or activation triggers are not interpreted".into(),
+                            ReasonCode::RuntimeDropIns,
+                            "runtime drop-ins are not interpreted".into(),
                         );
                     }
-                    if r.reload != "no" || r.load != "loaded" {
+                    if !r.triggered_by.is_empty() {
+                        return (
+                            Outcome::Unsupported,
+                            ReasonCode::RuntimeActivation,
+                            "runtime activation triggers are not interpreted".into(),
+                        );
+                    }
+                    if r.reload != "no" {
                         return (
                             Outcome::Indeterminate,
-                            "unit is not loaded or manager requires a daemon reload".into(),
+                            ReasonCode::DaemonReloadRequired,
+                            "manager reload state is pending or unavailable".into(),
+                        );
+                    }
+                    if r.load != "loaded" {
+                        return (
+                            Outcome::Indeterminate,
+                            ReasonCode::UnitNotLoaded,
+                            "unit is not loaded".into(),
                         );
                     }
                     if [("load", &r.load), ("active", &r.active), ("sub", &r.sub)]
                         .iter()
                         .any(|(key, value)| resource.properties.get(*key) != Some(value))
                     {
-                        return (Outcome::Indeterminate,"systemd observations changed between collections or lack runtime state".into());
+                        return (Outcome::Indeterminate,ReasonCode::ObservationChanged,"systemd observations changed between collections or lack runtime state".into());
                     }
                     if r.fragment.as_os_str().is_empty() || d.fragment.is_none() {
                         return (
                             Outcome::Indeterminate,
+                            ReasonCode::FragmentUnavailable,
                             "resolved runtime/declaration fragment evidence unavailable".into(),
                         );
                     }
                     if d.fragment.as_ref() != Some(&r.fragment) {
-                        return (Outcome::Mismatch,"loaded unit fragment differs from the booted generation's declaration; no activity or risk inference".into());
+                        return (Outcome::Mismatch,ReasonCode::FragmentMismatch,"loaded unit fragment differs from the booted generation's declaration; no activity or risk inference".into());
                     }
                     if r.service_type.is_empty() {
                         return (
                             Outcome::Indeterminate,
+                            ReasonCode::RuntimeTypeUnavailable,
                             "runtime service Type is unavailable".into(),
                         );
                     }
@@ -89,12 +116,14 @@ pub fn compare(
                     {
                         return (
                             Outcome::Unsupported,
+                            ReasonCode::RuntimeTypeUnsupported,
                             "runtime service Type is not interpreted".into(),
                         );
                     }
                     if ServiceType::parse(&r.service_type) != d.service_type {
                         return (
                             Outcome::Mismatch,
+                            ReasonCode::TypeMismatch,
                             "loaded service Type differs from the supported declaration".into(),
                         );
                     }
@@ -102,6 +131,7 @@ pub fn compare(
                         if expected.generation != generation.booted {
                             return (
                                 Outcome::Indeterminate,
+                                ReasonCode::ExpectationGenerationMismatch,
                                 "operator expectation is pinned to a different generation".into(),
                             );
                         }
@@ -110,16 +140,17 @@ pub fn compare(
                             "inactive" | "failed" => false,
                             _ => return (
                                 Outcome::Indeterminate,
+                                ReasonCode::TransitionalActivity,
                                 "service is transitioning; activity comparison is indeterminate"
                                     .into(),
                             ),
                         };
                         if actual != expected.active {
-                            return (Outcome::Mismatch,format!("explicit generation-pinned operator activity expectation: expected {}, observed {}",expected.active,r.active));
+                            return (Outcome::Mismatch,ReasonCode::ActivityMismatch,format!("explicit generation-pinned operator activity expectation: expected {}, observed {}",expected.active,r.active));
                         }
-                        return (Outcome::Match,"unit artifact, Type, and explicit generation-pinned activity expectation agree".into());
+                        return (Outcome::Match,ReasonCode::ActivityMatch,"unit artifact, Type, and explicit generation-pinned activity expectation agree".into());
                     }
-                    (Outcome::Match,"unit artifact and Type agree; activity is informational, with no continuous activity expectation".into())
+                    (Outcome::Match,ReasonCode::ArtifactMatch,"unit artifact and Type agree; activity is informational, with no continuous activity expectation".into())
                 };
                 evaluate()
             }
@@ -134,6 +165,7 @@ pub fn compare(
         results.push(Comparison {
             unit: d.unit.clone(),
             outcome,
+            reason_code,
             reason,
             evidence,
         });
@@ -145,6 +177,7 @@ pub fn compare(
         results.push(Comparison {
             unit: expected.unit.clone(),
             outcome: Outcome::Indeterminate,
+            reason_code: ReasonCode::ExpectationDeclarationMissing,
             reason: "operator expectation has no supported booted-generation declaration".into(),
             evidence: vec![expected.generation.clone()],
         });
