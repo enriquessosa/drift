@@ -1,9 +1,15 @@
 # Drift
 
-Drift is an unprivileged, read-only Linux CLI for collecting observations and
-comparing saved historical snapshots, with a narrow Milestone 2 adapter for NixOS
-booted-generation systemd declarations. It does not evaluate Nix, assign risk
-severity, remediate findings, run a daemon, or scan other hosts.
+Drift is an unprivileged, read-only Rust CLI for Linux/NixOS system auditing.
+It compares historical snapshots and performs limited NixOS declared-state checks
+when supported semantics and compatible generation evidence are available.
+Findings are generated on demand and receive conservative severity indicating
+investigation priority, not proof of exploitation or compromise. Not every
+change becomes a finding; raw changes and indeterminate comparisons remain distinct.
+
+Drift is MIT-licensed; see [LICENSE](LICENSE) and
+[third-party notices](THIRD_PARTY_NOTICES.md). The copyright-holder placeholder
+must be confirmed before publication.
 
 ## NixOS setup and verification
 

@@ -62,3 +62,31 @@ Drift distinguishes historical change from current NixOS declaration agreement.
 Neither evidence-based observations nor findings establish whether the machine
 has been compromised. See README and findings-rules.md for configuration,
 privacy boundaries and exact supported semantics.
+
+# Licensing cleanup and publication gate
+
+Drift 0.1.0 declares MIT in Cargo and Nix metadata. LICENSE uses an explicit
+copyright-holder placeholder: the configured Git author is Carlos Jimenez, but
+Git identity is not evidence of legal ownership. Confirm the holder before
+publication. THIRD_PARTY_NOTICES.md and licenses/inventory.json contain the
+Linux dependency inventory and source notices installed into the Nix output.
+
+Publication blockers: confirm Drift's holder; complete Rust runtime and native
+closure license/source/notice review; assemble and verify notices for the chosen
+distribution format. Vulnerability-audit results must be reviewed separately
+from licensing; neither tests nor a license inventory establish security.
+
+Nonblocking technical limitations remain narrow NixOS declared-state semantics,
+unverified matched-generation host auditing, limited architecture/platform
+verification, systemctl subprocesses without explicit timeouts, and CI not yet
+executed remotely. Version, JSON schemas, CLI behavior and snapshot formats are
+unchanged by this cleanup.
+
+Dependency audit on 2026-11-08: Cargo Audit 0.22.2 scanned the 67 locked crate
+packages using 1,422 RustSec advisories at database commit
+309392b18f6b17022f82c701f300433126901068 (updated 2026-11-06). It reported zero
+known vulnerabilities and no warnings. This does not cover native libraries,
+unknown vulnerabilities, or every possible enabled platform/feature combination.
+The license inventory covers 59 Linux-target Cargo packages; it is narrower
+than the all-target lockfile vulnerability scan. Full cross-platform license
+clearance and Rust/native runtime notice review remain outstanding.

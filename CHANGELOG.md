@@ -7,4 +7,6 @@
 - Limited NixOS booted-generation declared/runtime auditing.
 - Nix executable packaging, synthetic demonstrations, and Rust CI.
 
+- MIT project metadata, upstream Cargo notices and explicit publication gates.
+
 No public release has been published.

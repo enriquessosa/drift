@@ -18,7 +18,13 @@
         };
         cargoLock.lockFile = ./Cargo.lock;
         strictDeps = true;
+        postInstall = ''
+          mkdir -p $out/share/doc/drift
+          cp LICENSE THIRD_PARTY_NOTICES.md $out/share/doc/drift/
+          cp -r licenses $out/share/doc/drift/
+        '';
         meta.mainProgram = "drift";
+        meta.license = pkgs.lib.licenses.mit;
       };
     });
     devShells = nixpkgs.lib.genAttrs systems (system: let
