@@ -65,15 +65,17 @@ privacy boundaries and exact supported semantics.
 
 # Licensing cleanup and publication gate
 
-Drift 0.1.0 declares MIT in Cargo and Nix metadata. LICENSE uses an explicit
-copyright-holder placeholder: the configured Git author is Carlos Jimenez, but
-Git identity is not evidence of legal ownership. Confirm the holder before
-publication. THIRD_PARTY_NOTICES.md and licenses/inventory.json contain the
+Drift 0.1.0 declares MIT in Cargo and Nix metadata. Its copyright attribution is
+Copyright (c) 2026 Carlos Enrique Jimenez Sosa, matching the local Pulse LICENSE
+and confirmed by the owner. The supplied github.com/enriquessosa/pulse URL was
+unavailable; the approved local reference points to enriquessosa/pulse-systemd.
+THIRD_PARTY_NOTICES.md and licenses/inventory.json contain the
 Linux dependency inventory and source notices installed into the Nix output.
 
-Publication blockers: confirm Drift's holder; complete Rust runtime and native
-closure license/source/notice review; assemble and verify notices for the chosen
-distribution format. Vulnerability-audit results must be reviewed separately
+Publication blockers: obtain/reconstruct Rust binary-specific standard-library
+attribution and prepare the native closure corresponding-source/notice mechanism
+for the chosen distribution format. Exact upstream runtime notice files and
+source hashes are now supplied; this does not close those distribution gates. Vulnerability-audit results must be reviewed separately
 from licensing; neither tests nor a license inventory establish security.
 
 Nonblocking technical limitations remain narrow NixOS declared-state semantics,
@@ -89,4 +91,15 @@ known vulnerabilities and no warnings. This does not cover native libraries,
 unknown vulnerabilities, or every possible enabled platform/feature combination.
 The license inventory covers 59 Linux-target Cargo packages; it is narrower
 than the all-target lockfile vulnerability scan. Full cross-platform license
-clearance and Rust/native runtime notice review remain outstanding.
+clearance and binary-specific Rust/native redistribution verification remain outstanding.
+
+The final redistribution review obtained the exact locked Rust 1.99.0, glibc
+2.44 and GCC 16.2.0 source archives. See THIRD_PARTY_NOTICES.md and
+licenses/runtime-inventory.json for 85 retained source notices and provenance.
+Rust compiler-builtins has conjunctive MIT/Apache-with-LLVM-exception terms;
+glibc includes LGPL 2.1 and additional notices; GCC provides Runtime Library
+Exception 3.1. The remaining binary-specific/source-distribution gates prevent
+release integration at this review. No standalone archive or Nix closure export
+has been produced. Cargo notice regeneration exactly reproduced the existing
+59-package inventory. The local Pulse reference was at commit
+ec71a8ff950a3296a9b1df62d2173f464af71fe8 when attribution was confirmed.

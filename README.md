@@ -8,8 +8,8 @@ investigation priority, not proof of exploitation or compromise. Not every
 change becomes a finding; raw changes and indeterminate comparisons remain distinct.
 
 Drift is MIT-licensed; see [LICENSE](LICENSE) and
-[third-party notices](THIRD_PARTY_NOTICES.md). The copyright-holder placeholder
-must be confirmed before publication.
+[third-party notices](THIRD_PARTY_NOTICES.md). Copyright (c) 2026 Carlos Enrique
+Jimenez Sosa.
 
 ## NixOS setup and verification
 

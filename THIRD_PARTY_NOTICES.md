@@ -38,23 +38,53 @@ under `share/doc/drift`. A future standalone archive must explicitly include
 these files alongside its binary; repository presence alone is insufficient.
 Do not distribute a bare executable and assume these notices accompany it.
 
-The executable also incorporates Rust standard-library/compiler runtime code,
-which this Cargo inventory does not enumerate. Rust runtime notices and any
-additional bundled components require review before standalone distribution.
+## Exact runtime source review
+
+`licenses/runtime-inventory.json` records the locked source archives, their
+SHA-256 hashes and individual upstream/distributed notice hashes. Regenerate
+with `python3 tools/runtime_notices.py` after realizing the recorded Nix source
+paths. The Nix package already installs this entire tree under share/doc/drift.
+Whitespace normalization preserves the upstream wording.
+
+Rust 1.99.0: root MIT/Apache texts, COPYRIGHT and license-metadata.json, plus all
+76 selected root/library notice files, are retained conservatively, including
+vendor notices for unbuilt platforms. Compiler-builtins declares MIT AND
+Apache-2.0 WITH LLVM-exception for the crate, rather than a simple MIT alternative;
+its full license text is supplied. libm declares MIT. Rust's COPYRIGHT explicitly
+points to generated COPYRIGHT-library.html for binary-release standard-library
+attribution. That artifact-specific generated document is not present in the
+installed toolchain/source archive reviewed here. Source notices improve coverage
+but do not establish exact attribution completeness for the linked standard
+library. Obtaining or reconstructing that binary-specific attribution remains
+a publication blocker.
 
 The current Nix executable dynamically references glibc (libc, libm and loader)
-and GCC libgcc_s. The locked Nixpkgs metadata identifies glibc as LGPL-2.0-or-later and
-GCC as GPL-3.0-or-later at package level. That coarse metadata does not
-express the component-specific GCC runtime exception; exact output-component
-terms, source availability and redistribution requirements must be verified
-against the locked native sources before redistributing their closure. Nix build
-tools (compiler, Cargo, pkg-config and build hooks) are not automatically included
-in Drift's output merely because they build it. The Nix store output contains
-references to native libraries rather than copies of those libraries; exporting
-a closure redistributes those dependencies separately. This inventory is not a
-complete license clearance for a Nix closure or standalone archive.
+and GCC libgcc_s. Exact glibc 2.44 source provides COPYING.LESSERv2 (LGPL 2.1),
+COPYINGv2, COPYINGv3 and LICENSES; all are supplied. LICENSES expressly requires
+its additional third-party notices with binary distributions. This is more
+specific than the coarse LGPL-2.0-or-later label in Nixpkgs package metadata.
+GCC 16.2.0 root COPYING files, including GPLv3 and GCC Runtime Library Exception
+3.1, are supplied. The exception applies to files bearing the relevant notice
+and eligible compilation processes; package-level GPL metadata alone does not
+capture those permissions. This is not a determination that every file in the
+native output is covered by that exception.
 
-Other target-specific Cargo sources were not inventoried. No compliance claim is
-made for unbuilt targets. The copyright holder of Drift is still a placeholder
-in LICENSE and must be confirmed. These are publication blockers; the copied
-Cargo notices alone do not establish complete compliance.
+Nix build tools are not automatically shipped with Drift merely because they
+build it. Drift's output references native libraries instead of copying them.
+Exporting a Nix closure redistributes those outputs separately, with their own
+license and corresponding-source requirements. The source archive hashes here
+identify upstream inputs, not a complete corresponding-source distribution of
+Nixpkgs patches/build recipes for every exported library. No written source offer
+is made by this document. Prepare and verify the source/notices mechanism for a
+closure export before publication. That distribution step remains a blocker.
+
+A future standalone archive must carry the project and third-party notice trees
+alongside the executable and resolve its Nix store runtime paths or define a
+separately reviewed portable build. No portable binary archive has been prepared
+or cleared. Other target-specific Cargo sources and native closure components
+have not received comprehensive review. These limits are publication blockers,
+not an assertion of complete legal compliance.
+
+Drift's copyright attribution is Copyright (c) 2026 Carlos Enrique Jimenez Sosa,
+matching the owner-approved local Pulse LICENSE convention. The supplied public
+Pulse URL was unavailable; the local checkout points to pulse-systemd.
