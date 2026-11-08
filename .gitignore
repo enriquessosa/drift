@@ -1,0 +1,41 @@
+# Rust and Nix build outputs
+/target/
+/result
+/result-*
+
+# Local databases, journals, and generated state
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+/state/
+/.drift/
+/reports/
+/tmp/
+/temp/
+*.log
+*.tmp
+
+# Local environment, credentials, and agent configuration
+.env
+.env.*
+!.env.example
+/.aws/
+/.ssh/
+/.codex/
+/.agents/
+/secrets/
+*.pem
+*.key
+*.p12
+
+# Editor and operating-system temporary files
+/.idea/
+/.vscode/
+*~
+*.swp
+*.swo
+*.bak
+.DS_Store

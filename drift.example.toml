@@ -1,0 +1,8 @@
+# No config is loaded implicitly: pass --config drift.example.toml.
+systemd = true
+network = true
+files = true
+# Only metadata is collected. Final symlinks are inspected, not dereferenced.
+paths = ["/etc/passwd", "/etc/ssh/sshd_config"]
+# Optional absolute path; parent must be private (0700).
+# database = "/home/alice/.local/state/drift/snapshots.sqlite3"
