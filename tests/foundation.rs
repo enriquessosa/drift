@@ -209,10 +209,14 @@ fn unavailable_collectors_are_explicit() {
 fn cli_validation() {
     for args in [
         vec!["drift", "scan"],
+        vec!["drift", "scan", "--findings"],
+        vec!["drift", "scan", "--findings", "--json"],
         vec!["drift", "snapshot", "create"],
         vec!["drift", "snapshot", "list"],
         vec!["drift", "diff", "--latest"],
         vec!["drift", "diff", "--from", "1", "--to", "2"],
+        vec!["drift", "diff", "--latest", "--findings"],
+        vec!["drift", "diff", "--latest", "--findings", "--json"],
     ] {
         assert!(Cli::try_parse_from(args).is_ok());
     }
@@ -284,6 +288,19 @@ fn cli_end_to_end_isolated_state() {
     assert!(run(&["diff", "--from", "1", "--to", "2"])
         .unwrap()
         .contains("Changed files"));
+    let findings = run(&["diff", "--latest", "--findings"]).unwrap();
+    assert!(findings.contains("Findings v1:"));
+    assert!(findings.contains("file.permissions_broadened"));
+    let json = run(&["diff", "--from", "1", "--to", "2", "--findings", "--json"]).unwrap();
+    let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(value["from_snapshot_id"], 1);
+    assert_eq!(value["to_snapshot_id"], 2);
+    assert_eq!(value["findings"]["schema_version"], 1);
+    assert_eq!(value["findings"]["counts"]["total"], 1);
+    assert_eq!(
+        value["findings"]["findings"][0]["rule_id"],
+        "file.permissions_broadened"
+    );
 }
 
 #[test]

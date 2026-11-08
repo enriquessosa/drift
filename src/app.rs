@@ -1,7 +1,7 @@
 use crate::{
     cli::{Cli, Command, SnapshotCommand},
     config::Config,
-    diff, report,
+    diff, findings, report,
     storage::sqlite::Store,
 };
 use anyhow::{bail, Result};
@@ -18,7 +18,12 @@ pub fn run_with_auditor(
 ) -> Result<String> {
     let mut output = String::new();
     let config = Config::load(cli.config.as_deref())?;
-    if let Command::Scan { no_declared, json } = cli.command {
+    if let Command::Scan {
+        no_declared,
+        json,
+        findings: include_findings,
+    } = cli.command
+    {
         let snapshot = collect(&config)?;
         let declared = if no_declared {
             crate::nixos::model::Audit::disabled()
@@ -26,11 +31,22 @@ pub fn run_with_auditor(
             audit(&config, &snapshot)
         };
         return if json {
-            Ok(serde_json::to_string_pretty(
-                &serde_json::json!({"observation":snapshot,"declared":declared}),
-            )? + "\n")
+            let value = if include_findings {
+                serde_json::json!({
+                    "observation": snapshot,
+                    "declared": declared,
+                    "findings": findings::declared(&declared),
+                })
+            } else {
+                serde_json::json!({"observation":snapshot,"declared":declared})
+            };
+            Ok(serde_json::to_string_pretty(&value)? + "\n")
         } else {
-            Ok(report::scan(&snapshot) + &crate::nixos::render(&declared))
+            let mut rendered = report::scan(&snapshot) + &crate::nixos::render(&declared);
+            if include_findings {
+                rendered.push_str(&report::findings(&findings::declared(&declared)));
+            }
+            Ok(rendered)
         };
     }
     let mut store = Store::open(&config.database_path()?)?;
@@ -51,7 +67,13 @@ pub fn run_with_auditor(
                 output.push_str(&format!("{id}\t{timestamp} (Unix seconds)\n"));
             }
         }
-        Command::Diff { latest, from, to } => {
+        Command::Diff {
+            latest,
+            from,
+            to,
+            findings: include_findings,
+            json,
+        } => {
             let (from, to) = if latest {
                 let ids = store.list()?;
                 if ids.len() < 2 {
@@ -64,11 +86,27 @@ pub fn run_with_auditor(
                     to.expect("validated by Clap"),
                 )
             };
+            let previous = store.get(from)?;
+            let current = store.get(to)?;
+            let comparison = diff::compare(&previous, &current)?;
+            let findings_report = include_findings
+                .then(|| findings::historical(&comparison, &previous, &current, from, to));
+            if json {
+                let Some(findings_report) = findings_report else {
+                    bail!("JSON output is available with --findings");
+                };
+                return Ok(serde_json::to_string_pretty(&serde_json::json!({
+                    "from_snapshot_id": from,
+                    "to_snapshot_id": to,
+                    "comparison": comparison,
+                    "findings": findings_report,
+                }))? + "\n");
+            }
             output.push_str(&format!("Comparing snapshot {from} -> {to}\n"));
-            output.push_str(&report::diff(&diff::compare(
-                &store.get(from)?,
-                &store.get(to)?,
-            )?));
+            output.push_str(&report::diff(&comparison));
+            if let Some(findings_report) = findings_report {
+                output.push_str(&report::findings(&findings_report));
+            }
         }
     }
     Ok(output)

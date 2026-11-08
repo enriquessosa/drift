@@ -279,6 +279,39 @@ NixOS inventory. See [coverage analysis and reason-code catalog](docs/nixos-cove
 for before/after counts, chosen cases, rejected categories, code meanings, JSON
 compatibility, and reproducible verification commands.
 
+## Security and reliability findings (Milestone 3)
+
+Historical findings are an opt-in analysis layered on the existing raw diff:
+
+```sh
+drift diff --latest --findings
+drift diff --from 10 --to 11 --findings --json
+drift scan --findings --json
+```
+
+`diff --findings` preserves raw comparison output and appends separate findings.
+Its JSON form has independent `comparison` and versioned `findings` objects.
+`scan --findings` evaluates only the current scan's confirmed
+declared/runtime mismatches; those results are not persisted and are not
+attributed to historical snapshots. Findings are never written to SQLite.
+Without `--findings`, existing scan, snapshot, diff, and JSON behavior remains
+unchanged.
+
+Initial rules report a newly observed TCP listener (informational), rwx
+permission broadening on a configured regular file (low security), a systemd
+service transition into `failed` (low reliability), and narrowly confirmed
+NixOS declared/runtime mismatches (low informational or reliability). Every
+finding carries stable rule/resource IDs, normalized evidence, provenance,
+confidence, limitations and investigation guidance. Incomplete, unsupported or
+scope-incompatible comparisons remain separate and cannot become findings. A
+finding is a prompt to investigate, not proof of compromise or system health.
+
+TCP bind-scope widening is intentionally not inferred: current process
+annotations do not provide a reliable durable service identity. Address/port
+changes remain raw listener removals/additions rather than being paired by PID
+or process name. Exact triggers, severity rationale, JSON fields and remaining
+limitations are documented in [the findings rules reference](docs/findings-rules.md).
+
 ## Collection, safety, and limitations
 
 - **Systemd:** fixed `systemctl list-units` and `list-unit-files` invocations,
@@ -358,12 +391,27 @@ missing evidence, inferred-type success and rejection fixtures. The real host's
 generations differ. Detailed results and limitations are in the coverage analysis.
 Private verification artifacts use `/tmp/drift-coverage-*` and are not committed.
 
+Milestone 3 adds deterministic historical and same-scan declared/runtime
+findings. The required `cargo fmt --check`, offline locked Clippy, tests, and
+build passed in the Nix development shell; 60 tests passed (11 unit, 21
+foundation, 28 NixOS). The real unprivileged scan returned Complete for systemd,
+network and files (202, 16 and 0 resources respectively). Scan JSON,
+`--findings`, `--no-declared`, and two snapshot/list/latest-diff smoke checks
+passed using a private temporary database outside production state. The NixOS
+adapter reported supported capability, but booted/activated/live references did
+not agree: 155 declarations remained unsupported and 11 comparisons
+indeterminate, with no match or mismatch claimed. These results do not verify a
+matched-generation host comparison. Fixture tests cover that case without
+changing or rebooting the host.
+
 ## Git repository
 
 Earlier sessions exposed an empty `.git` directory, initially behind a read-only
 sandbox mount. After unrestricted inspection confirmed the underlying directory
 was also empty and unmounted, a fresh repository was initialized on `main` with
-explicit approval. No existing Git history was replaced. No remote is configured.
+explicit approval. Later, with an independently verified repository backup,
+local history was rewritten to remove committed milestone prompt documents while
+preserving the milestone implementation commits. No remote is configured.
 Cargo.lock and flake.lock are tracked for reproducibility; build outputs, local
 databases and sidecars, runtime state, credentials, and editor temporary files
 are excluded by `.gitignore`.

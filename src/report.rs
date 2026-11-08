@@ -71,3 +71,59 @@ pub fn diff(d: &Comparison) -> String {
     .expect("writing to String cannot fail");
     output
 }
+
+pub fn findings(report: &crate::findings::Report) -> String {
+    let mut output = String::new();
+    writeln!(
+        output,
+        "Findings v{}: {} (category counts: {:?}; severity counts: {:?})",
+        report.schema_version,
+        report.counts.total,
+        report.counts.by_category,
+        report.counts.by_severity
+    )
+    .expect("writing to String cannot fail");
+    writeln!(
+        output,
+        "  historical raw comparisons: added {}, removed {}, changed {}, unchanged {}, indeterminate {}; declared/runtime comparisons: matched {}, mismatched {}, indeterminate {}, unsupported {}",
+        report.historical_comparisons.added,
+        report.historical_comparisons.removed,
+        report.historical_comparisons.changed,
+        report.historical_comparisons.unchanged,
+        report.historical_comparisons.indeterminate,
+        report.declared_comparisons.unchanged,
+        report.declared_comparisons.mismatched,
+        report.declared_comparisons.indeterminate,
+        report.declared_comparisons.unsupported
+    )
+    .expect("writing to String cannot fail");
+    for finding in &report.findings {
+        writeln!(
+            output,
+            "  {:?}/{:?} [{}] {} — {}",
+            finding.category,
+            finding.severity,
+            finding.rule_id,
+            finding.stable_identifier,
+            finding.summary
+        )
+        .expect("writing to String cannot fail");
+        writeln!(output, "    {}", finding.explanation).expect("writing to String cannot fail");
+        writeln!(output, "    Why: {:?}", finding.evidence_limitations)
+            .expect("writing to String cannot fail");
+        writeln!(
+            output,
+            "    Investigate: {}",
+            finding.investigation_guidance
+        )
+        .expect("writing to String cannot fail");
+    }
+    if report.findings.is_empty() {
+        writeln!(
+            output,
+            "  No supported finding rules fired; this is not proof that the system is secure or healthy."
+        )
+        .expect("writing to String cannot fail");
+    }
+    output
+}

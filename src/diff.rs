@@ -1,7 +1,9 @@
 use crate::model::{Resource, Snapshot, Status, VERSION};
 use anyhow::{bail, Result};
+use serde::Serialize;
 use std::collections::BTreeSet;
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub enum Kind {
     Added,
     Removed,
@@ -9,7 +11,7 @@ pub enum Kind {
     Unchanged,
     Indeterminate,
 }
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Entry {
     pub collector: String,
     pub id: String,
@@ -17,7 +19,7 @@ pub struct Entry {
     pub previous: Option<Resource>,
     pub current: Option<Resource>,
 }
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Comparison {
     pub entries: Vec<Entry>,
     pub outcomes: Vec<String>,

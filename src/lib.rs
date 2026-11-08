@@ -3,6 +3,7 @@ pub mod cli;
 pub mod collectors;
 pub mod config;
 pub mod diff;
+pub mod findings;
 pub mod model;
 pub mod nixos;
 pub mod report;

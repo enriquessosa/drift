@@ -17,6 +17,9 @@ pub enum Command {
         /// Emit observation and declared-state results as structured JSON.
         #[arg(long)]
         json: bool,
+        /// Evaluate and display evidence-backed findings for this scan.
+        #[arg(long)]
+        findings: bool,
     },
     Snapshot {
         #[command(subcommand)]
@@ -29,6 +32,12 @@ pub enum Command {
         from: Option<i64>,
         #[arg(long, requires = "from", required_unless_present = "latest")]
         to: Option<i64>,
+        /// Evaluate evidence-backed findings from this historical comparison.
+        #[arg(long)]
+        findings: bool,
+        /// Emit a machine-readable historical comparison and findings report.
+        #[arg(long, requires = "findings")]
+        json: bool,
     },
 }
 #[derive(Debug, Subcommand)]

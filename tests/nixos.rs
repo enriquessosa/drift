@@ -448,6 +448,10 @@ fn cli_json_and_disable_are_deterministic_and_do_not_open_database() {
     let json: serde_json::Value = serde_json::from_str(&a).unwrap();
     assert_eq!(json["declared"]["comparisons"][0]["outcome"], "match");
     assert_eq!(json["observation"]["version"], 1);
+    let with_findings = run(&["scan", "--findings", "--json"]);
+    let with_findings: serde_json::Value = serde_json::from_str(&with_findings).unwrap();
+    assert_eq!(with_findings["findings"]["schema_version"], 1);
+    assert_eq!(with_findings["findings"]["counts"]["total"], 0);
     assert!(run(&["scan"]).contains("Declared state: Supported"));
     assert!(!database.exists());
     let cli = Cli::try_parse_from(["drift", "scan", "--no-declared", "--json"]).unwrap();
