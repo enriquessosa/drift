@@ -360,71 +360,35 @@ build tools and explicitly created configuration files.
 
 ## Verification status
 
-Local offline compilation, Clippy with warnings denied, and tests passed after
-hardening. Tests include successful systemd output fixtures, injected
-permission-denied metadata errors (independent of host/root permission behavior),
-unchanged rejection of unrelated/legacy databases and sidecars, schema/version
-checks, namespace compatibility, process attribution fixtures, PID-insensitive
-diffing, serialization, and CLI orchestration with synthetic host identity.
-Formatting passed for Milestone 1 with 22 tests (one unit test and 21 integration tests).
-On the NixOS host, `nix develop --offline path:. --command rustc --version`
-succeeded. Real default and example-config scans succeeded; inspect the collector
-statuses rather than treating exit success as complete evidence. A temporary
-loopback listener was detected and correctly associated with its owning process.
-Snapshot creation, listing, latest comparison, and explicit-ID comparison all
-succeeded using disposable state outside the repository. Host verification logs
-are in `/tmp/drift-host-verification.log` (mode 0600; temporary, not a release artifact).
+The v0.1.0 release candidate passed `cargo fmt --check`, offline locked Clippy
+with warnings denied, all 61 offline locked tests, and
+`cargo build --offline --locked`. `nix build path:.` also passed on x86_64 Linux.
+The packaged executable started and reported version 0.1.0. A real unprivileged
+JSON scan completed with systemd, network, and file collectors marked complete.
+Tests use deterministic fixtures for denied access, unsupported and incomplete
+evidence, SQLite safety, findings, and CLI behavior.
 
-These checks verify the current host and development shell; they do not establish
-compatibility with every NixOS release, permission setup, or network namespace.
-Collection remains sequential and best effort.
-
-Milestone 2 adds 19 synthetic NixOS tests, for 41 tests total. Required formatting,
-Clippy, tests and build are rerun in the Nix development shell before committing.
-A real read-only NixOS scan resolved the booted and activated generation paths
-independently, confirmed the live unit tree belonged to the activated generation,
-and inventoried 166 booted service declarations: 158 unsupported and 8
-indeterminate. There were no confirmed mismatches. This is expected on this host:
-booted and activated generations differ. Matched-scope matches and mismatches are
-verified with fixtures, not by changing or rebooting the host. JSON output and
-`--no-declared` are checked alongside unchanged historical snapshot operations.
-Milestone 2 verification logs are kept privately under `/tmp/drift-milestone2-*`.
-
-Milestone 2.1 brings the suite to 50 tests, with coverage grouping, privacy, legacy JSON,
-missing evidence, inferred-type success and rejection fixtures. The real host's
-166-declaration comparison moves from 158 unsupported/8 indeterminate to
-155 unsupported/11 indeterminate, with no matches or mismatches asserted while
-generations differ. Detailed results and limitations are in the coverage analysis.
-Private verification artifacts use `/tmp/drift-coverage-*` and are not committed.
-
-Milestone 3 adds deterministic historical and same-scan declared/runtime
-findings. The required `cargo fmt --check`, offline locked Clippy, tests, and
-build passed in the Nix development shell; 60 tests passed (11 unit, 21
-foundation, 28 NixOS). The real unprivileged scan returned Complete for systemd,
-network and files (202, 16 and 0 resources respectively). Scan JSON,
-`--findings`, `--no-declared`, and two snapshot/list/latest-diff smoke checks
-passed using a private temporary database outside production state. The NixOS
-adapter reported supported capability, but booted/activated/live references did
-not agree: 155 declarations remained unsupported and 11 comparisons
-indeterminate, with no match or mismatch claimed. These results do not verify a
-matched-generation host comparison. Fixture tests cover that case without
-changing or rebooting the host.
+These are local checks; GitHub Actions has not run remotely. CI currently checks
+the Rust toolchain but does not install Nix or run `nix build`. Only x86_64 Linux
+has been verified for the packaged output. A matched-generation NixOS audit is
+covered by fixtures, not by a host whose booted, activated, and live evidence
+matched. See [release limitations](docs/release.md).
 
 ## Git repository
 
-Earlier sessions exposed an empty `.git` directory, initially behind a read-only
-sandbox mount. After unrestricted inspection confirmed the underlying directory
-was also empty and unmounted, a fresh repository was initialized on `main` with
-explicit approval. Later, with an independently verified repository backup,
-local history was rewritten to remove committed milestone prompt documents while
-preserving the milestone implementation commits. No remote is configured.
-Cargo.lock and flake.lock are tracked for reproducibility; build outputs, local
-databases and sidecars, runtime state, credentials, and editor temporary files
-are excluded by `.gitignore`.
+`Cargo.lock` and `flake.lock` are tracked for reproducibility. Build outputs,
+local databases and sidecars, runtime state, credentials, and editor temporary
+files are excluded by `.gitignore`.
 
-## Initial release preparation (0.1.0)
+## v0.1.0 source release scope
 
-See [installation, CLI, exit codes and troubleshooting](docs/release.md) and
-[release notes](CHANGELOG.md). Build with `nix build path:.` and run
-`./result/bin/drift --help`. Synthetic demonstrations are available with
+The reviewed v0.1.0 scope is source distribution and local Nix builds. Build
+locally with `nix build path:.` and run `./result/bin/drift --help`. No
+downloadable binaries will accompany the initial release, and no standalone
+binary archive has been prepared. Prebuilt Nix package or runtime-closure
+distribution has not been cleared. The locally built output installs
+third-party notices, but that alone does not satisfy corresponding-source
+obligations for redistributing its closure. See
+[installation, CLI, exit codes, and release limitations](docs/release.md) and
+[release notes](CHANGELOG.md). Synthetic demonstrations are available with
 `cargo run --offline --locked --example demo` and the `-- --incomplete` variant.

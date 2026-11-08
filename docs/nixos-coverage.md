@@ -8,8 +8,9 @@ The verified starting point was commit
 any changes. Phase A added codes and grouping with unchanged classification
 semantics, tested those diagnostics, and reran the live scan before Phase B.
 The inventory stayed at 166 service declarations and 231 other skipped entries.
-Private raw captures are under `/tmp/drift-coverage-*`; no host unit inventory,
-command text, credential values or private paths are committed here.
+Raw host captures used for local verification are not included in this repository.
+No host unit inventory, command text, credential values or private paths are
+committed here.
 
 The NixOS 26.05 host runs systemd 260.5. Booted and activated generations differ,
 and the live unit tree belongs to the activated generation. Both references were

@@ -66,9 +66,7 @@ privacy boundaries and exact supported semantics.
 # Licensing and distribution scope
 
 Drift 0.1.0 declares MIT in Cargo and Nix metadata. Its copyright attribution is
-Copyright (c) 2026 Carlos Enrique Jimenez Sosa, matching the local Pulse LICENSE
-and confirmed by the owner. The supplied github.com/enriquessosa/pulse URL was
-unavailable; the approved local reference points to enriquessosa/pulse-systemd.
+Copyright (c) 2026 Carlos Enrique Jimenez Sosa, confirmed by the project owner.
 THIRD_PARTY_NOTICES.md and licenses/inventory.json contain the
 Linux dependency inventory and source notices installed into the Nix output.
 
@@ -76,8 +74,8 @@ The v0.1.0 distribution scope is the public source repository and instructions
 for users to build locally with the locked Nix flake. Drift does not distribute
 a prebuilt package, Nix runtime closure, or standalone archive. The Rust
 standard-library attribution and exact native runtime notices are installed in
-the local Nix build output. The source-only scope is ready for integration;
-this is not a general legal-compliance determination.
+the local Nix build output. These notices do not establish general legal
+compliance or clear binary distribution.
 
 Before Drift distributes a Nix package or closure, inventory its paths with
 `nix path-info --recursive ./result`; inspect each non-Drift path's deriver
@@ -121,5 +119,4 @@ provides Runtime Library Exception 3.1. libidn2 and libunistring have their
 own LGPL/GPL notices. These notices do not alone satisfy a future closure
 distribution's corresponding-source obligations. No closure export or
 standalone archive has been produced. Cargo notice regeneration exactly
-reproduced the 59-package inventory. The local Pulse reference was at commit
-ec71a8ff950a3296a9b1df62d2173f464af71fe8 when attribution was confirmed.
+reproduced the 59-package inventory.

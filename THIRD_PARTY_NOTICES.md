@@ -108,6 +108,5 @@ review and must carry the project and third-party notice trees. Other
 target-specific Cargo sources and native closure components have not received
 comprehensive review. This is not a claim of universal legal compliance.
 
-Drift's copyright attribution is Copyright (c) 2026 Carlos Enrique Jimenez Sosa,
-matching the owner-approved local Pulse LICENSE convention. The supplied public
-Pulse URL was unavailable; the local checkout points to pulse-systemd.
+Drift's verified copyright attribution is Copyright (c) 2026 Carlos Enrique
+Jimenez Sosa.
