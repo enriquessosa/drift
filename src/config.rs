@@ -26,8 +26,13 @@ impl Default for Config {
 impl Config {
     pub fn load(path: Option<&Path>) -> Result<Self> {
         let mut c: Self = match path {
-            Some(p) => toml::from_str(&std::fs::read_to_string(p).context("read configuration")?)
-                .context("parse configuration")?,
+            Some(p) => toml::from_str(&std::fs::read_to_string(p).with_context(|| {
+                format!(
+                    "read configuration {}; check the path and read permissions",
+                    p.display()
+                )
+            })?)
+            .context("parse configuration")?,
             None => Self::default(),
         };
         if c.paths

@@ -415,3 +415,10 @@ preserving the milestone implementation commits. No remote is configured.
 Cargo.lock and flake.lock are tracked for reproducibility; build outputs, local
 databases and sidecars, runtime state, credentials, and editor temporary files
 are excluded by `.gitignore`.
+
+## Initial release preparation (0.1.0)
+
+See [installation, CLI, exit codes and troubleshooting](docs/release.md) and
+[release notes](CHANGELOG.md). Build with `nix build path:.` and run
+`./result/bin/drift --help`. Synthetic demonstrations are available with
+`cargo run --offline --locked --example demo` and the `-- --incomplete` variant.

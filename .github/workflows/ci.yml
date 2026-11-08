@@ -1,0 +1,16 @@
+name: Rust
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - run: rustup toolchain install 1.95.0 --profile minimal --component rustfmt --component clippy
+      - run: rustup default 1.95.0
+      - run: cargo fetch --locked
+      - run: cargo fmt --check
+      - run: cargo clippy --offline --locked --all-targets -- -D warnings
+      - run: cargo test --offline --locked
+      - run: cargo build --offline --locked
